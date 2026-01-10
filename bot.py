@@ -33,7 +33,6 @@ def start(message):
     )
 
 
-
 # BROADCAST (OWNER ONLY)
 @bot.message_handler(commands=["broadcast"])
 def broadcast(message):
@@ -59,23 +58,7 @@ def broadcast(message):
     bot.reply_to(message, f"Broadcast sent to {sent} users.")
 
 
-# FORWARD USER MESSAGES TO OWNER
-@bot.message_handler(func=lambda message: True)
-def forward_user_message(message):
-    if message.chat.id == OWNER_ID:
-        return
-
-    save_user(message.chat.id)
-
-    text = (
-        "📩 New user message\n\n"
-        f"User ID: {message.chat.id}\n"
-        f"Message:\n{message.text}"
-    )
-    bot.send_message(OWNER_ID, text)
-
-
-# OWNER REPLY COMMAND
+# OWNER REPLY COMMAND (MUST BE ABOVE CATCH-ALL)
 @bot.message_handler(commands=["reply"])
 def reply_to_user(message):
     if message.chat.id != OWNER_ID:
@@ -91,9 +74,25 @@ def reply_to_user(message):
 
     try:
         bot.send_message(user_id, reply_text)
-        bot.reply_to(message, "✅ Reply sent successfully.")
+        bot.reply_to(message, "✅ Reply sent.")
     except:
-        bot.reply_to(message, "❌ Failed to send reply. Check USER_ID.")
+        bot.reply_to(message, "❌ Failed. Check USER_ID.")
+
+
+# FORWARD USER MESSAGES TO OWNER (IGNORE COMMANDS)
+@bot.message_handler(func=lambda message: not message.text.startswith("/"))
+def forward_user_message(message):
+    if message.chat.id == OWNER_ID:
+        return
+
+    save_user(message.chat.id)
+
+    text = (
+        "📩 New user message\n\n"
+        f"User ID: {message.chat.id}\n"
+        f"Message:\n{message.text}"
+    )
+    bot.send_message(OWNER_ID, text)
 
 
 bot.infinity_polling()
