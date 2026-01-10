@@ -24,8 +24,14 @@ def start(message):
         message.chat.id,
         "Welcome to AI Crypto Software 👋\n\n"
         "This is the official AI Crypto Software Telegram bot.\n\n"
-        "You can send your questions here, and our team will respond."
+        "Here you will receive:\n"
+        "• Important announcements\n"
+        "• Software updates\n"
+        "• Official notices\n\n"
+        "You may also ask your questions or FAQs here.\n\n"
+        "Thank you for being part of AI Crypto."
     )
+
 
 
 # BROADCAST (OWNER ONLY)
