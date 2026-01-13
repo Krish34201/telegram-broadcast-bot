@@ -3,6 +3,7 @@ import os
 import time
 import random
 import string
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 # ================= CONFIG =================
 
@@ -10,11 +11,24 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 OWNER_ID = int(os.getenv("OWNER_ID"))
 BOT_USERNAME = os.getenv("BOT_USERNAME")  # without @
 
+if not BOT_USERNAME:
+    raise RuntimeError("BOT_USERNAME is not set")
+
 bot = telebot.TeleBot(BOT_TOKEN)
 
 USERS_FILE = "users.txt"
 REFERRALS_FILE = "referrals.txt"
 PROFILES_FILE = "profiles.txt"
+
+# ================= KEYBOARD =================
+
+def main_menu_keyboard():
+    kb = InlineKeyboardMarkup(row_width=1)
+    kb.add(
+        InlineKeyboardButton("👤 Profile", callback_data="profile"),
+        InlineKeyboardButton("💳 Buy access", url="https://www.crypto-mining-software.shop")
+    )
+    return kb
 
 # ================= USER STORAGE =================
 
@@ -27,7 +41,7 @@ def save_user(user_id):
         if str(user_id) not in users:
             f.write(f"{user_id}\n")
 
-# ================= REFERRAL SYSTEM =================
+# ================= REFERRALS =================
 
 def save_referral(referrer_id, new_user_id):
     if not os.path.exists(REFERRALS_FILE):
@@ -35,14 +49,10 @@ def save_referral(referrer_id, new_user_id):
 
     with open(REFERRALS_FILE, "r+") as f:
         lines = f.read().splitlines()
-
-        # Prevent duplicate or inherited referrals
         for line in lines:
             if line.endswith(f":{new_user_id}"):
-                return False
-
+                return
         f.write(f"{referrer_id}:{new_user_id}\n")
-        return True
 
 
 def get_referral_count(user_id):
@@ -55,17 +65,15 @@ def get_referral_count(user_id):
 
 def get_discount_percent(user_id):
     count = get_referral_count(user_id)
-
     if count >= 8:
         return 10
     elif count >= 4:
         return 7
     elif count >= 1:
         return 5
-    else:
-        return 0
+    return 0
 
-# ================= LICENSE SYSTEM =================
+# ================= LICENSE =================
 
 def generate_license_key(length=12):
     chars = string.ascii_uppercase + string.digits
@@ -78,7 +86,6 @@ def get_or_create_license(user_id):
 
     with open(PROFILES_FILE, "r+") as f:
         lines = f.read().splitlines()
-
         for line in lines:
             uid, key = line.split("|", 1)
             if uid == str(user_id):
@@ -88,30 +95,19 @@ def get_or_create_license(user_id):
         f.write(f"{user_id}|{key}\n")
         return key
 
-# ================= START COMMAND =================
+# ================= START =================
 
 @bot.message_handler(commands=["start"])
 def start(message):
     user_id = message.chat.id
     save_user(user_id)
 
-    # Handle referral
+    # Silent referral handling
     parts = message.text.split()
-    if len(parts) > 1:
-        referrer_id = parts[1]
-
-        if referrer_id.isdigit():
-            referrer_id = int(referrer_id)
-            if referrer_id != user_id:
-                success = save_referral(referrer_id, user_id)
-                if success:
-                    bot.send_message(
-                        referrer_id,
-                        "🎉 New referral joined using your link!\n"
-                        "Your referral count has been updated."
-                    )
-
-    referral_link = f"https://t.me/{BOT_USERNAME}?start={user_id}"
+    if len(parts) > 1 and parts[1].isdigit():
+        referrer_id = int(parts[1])
+        if referrer_id != user_id:
+            save_referral(referrer_id, user_id)
 
     bot.send_message(
         user_id,
@@ -121,36 +117,25 @@ def start(message):
         "• Important announcements\n"
         "• Software updates\n"
         "• Official notices\n\n"
-        "🎁 Referral Program\n"
-        "Invite users using your referral link and earn 5–10% discount.\n\n"
-        f"🔗 Your referral link:\n{referral_link}\n\n"
-        "You may also ask your questions or FAQs here.\n\n"
-        "Thank you for being part of AI Crypto."
+        "Use the buttons below to continue 👇",
+        reply_markup=main_menu_keyboard()
     )
 
-# ================= PROFILE =================
+# ================= PROFILE LOGIC =================
 
-@bot.message_handler(commands=["profile"])
-def profile(message):
-    user = message.from_user
-    user_id = message.chat.id
-
+def send_profile(user, chat_id):
     first = user.first_name or ""
     last = user.last_name or ""
     name = (first + " " + last).strip()
+    display_name = f"{name} (@{user.username})" if user.username else name
 
-    if user.username:
-        display_name = f"{name} (@{user.username})"
-    else:
-        display_name = name
-
-    license_key = get_or_create_license(user_id)
-    referrals = get_referral_count(user_id)
-    discount = get_discount_percent(user_id)
-    referral_link = f"https://t.me/{BOT_USERNAME}?start={user_id}"
+    license_key = get_or_create_license(chat_id)
+    referrals = get_referral_count(chat_id)
+    discount = get_discount_percent(chat_id)
+    referral_link = f"https://t.me/{BOT_USERNAME}?start={chat_id}"
 
     bot.send_message(
-        user_id,
+        chat_id,
         f"<b>👤 Profile — {display_name}</b>\n\n"
         f"🔑 <b>License Key:</b>\n"
         f"<tg-spoiler>{license_key}</tg-spoiler>\n\n"
@@ -160,21 +145,20 @@ def profile(message):
         parse_mode="HTML"
     )
 
+# ================= PROFILE COMMAND =================
 
-# ================= USER COMMAND =================
+@bot.message_handler(commands=["profile"])
+def profile_cmd(message):
+    send_profile(message.from_user, message.chat.id)
 
-@bot.message_handler(commands=["myreferrals"])
-def my_referrals(message):
-    count = get_referral_count(message.chat.id)
-    discount = get_discount_percent(message.chat.id)
+# ================= PROFILE BUTTON =================
 
-    bot.reply_to(
-        message,
-        f"👥 Referrals: {count}\n"
-        f"💸 Discount: {discount}%"
-    )
+@bot.callback_query_handler(func=lambda call: call.data == "profile")
+def profile_button(call):
+    send_profile(call.from_user, call.from_user.id)
+    bot.answer_callback_query(call.id)
 
-# ================= ADMIN COMMANDS =================
+# ================= ADMIN BROADCAST =================
 
 @bot.message_handler(commands=["broadcast"])
 def broadcast(message):
@@ -194,14 +178,9 @@ def broadcast(message):
     for user in users:
         try:
             if reply.photo:
-                bot.send_photo(
-                    user,
-                    reply.photo[-1].file_id,
-                    caption=reply.caption or ""
-                )
+                bot.send_photo(user, reply.photo[-1].file_id, caption=reply.caption or "")
             elif reply.text:
                 bot.send_message(user, reply.text)
-
             sent += 1
             time.sleep(0.05)
         except:
@@ -209,65 +188,19 @@ def broadcast(message):
 
     bot.reply_to(message, f"📢 Broadcast sent to {sent} users.")
 
+# ================= FORWARD USER MSG =================
 
-@bot.message_handler(commands=["reply"])
-def reply_to_user(message):
-    if message.chat.id != OWNER_ID:
-        return
-
-    parts = message.text.split(maxsplit=2)
-    if len(parts) < 3:
-        bot.reply_to(message, "Usage:\n/reply USER_ID message")
-        return
-
-    user_id = parts[1]
-    reply_text = parts[2]
-
-    try:
-        bot.send_message(user_id, reply_text)
-        bot.reply_to(message, "✅ Reply sent.")
-    except:
-        bot.reply_to(message, "❌ Failed.")
-
-
-@bot.message_handler(commands=["referrals"])
-def referrals_stats(message):
-    if message.chat.id != OWNER_ID:
-        return
-
-    if not os.path.exists(REFERRALS_FILE):
-        bot.reply_to(message, "No referrals yet.")
-        return
-
-    stats = {}
-    with open(REFERRALS_FILE, "r") as f:
-        for line in f:
-            ref, _ = line.strip().split(":", 1)
-            stats[ref] = stats.get(ref, 0) + 1
-
-    response = "📊 Referral Stats\n\n"
-    for user, count in stats.items():
-        discount = get_discount_percent(int(user))
-        response += f"User {user} → {count} referrals → {discount}%\n"
-
-    bot.reply_to(message, response)
-
-# ================= FORWARD USER MESSAGES =================
-
-@bot.message_handler(func=lambda message: message.text and not message.text.startswith("/"))
+@bot.message_handler(func=lambda m: m.text and not m.text.startswith("/"))
 def forward_user_message(message):
     if message.chat.id == OWNER_ID:
         return
 
     save_user(message.chat.id)
-
     bot.send_message(
         OWNER_ID,
-        "📩 New user message\n\n"
-        f"User ID: {message.chat.id}\n"
-        f"Message:\n{message.text}"
+        f"📩 New user message\n\nUser ID: {message.chat.id}\nMessage:\n{message.text}"
     )
 
-# ================= START BOT =================
+# ================= RUN =================
 
 bot.infinity_polling()
