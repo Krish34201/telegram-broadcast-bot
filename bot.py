@@ -151,12 +151,13 @@ def profile(message):
 
     bot.send_message(
         user_id,
-        f"👤 Profile — {display_name}\n\n"
-        f"🔑 License Key:\n||{license_key}||\n\n"
-        f"👥 Referrals: {referrals}\n"
-        f"💸 Discount: {discount}%\n\n"
-        f"🔗 Personal Referral Link:\n{referral_link}",
-        parse_mode="MarkdownV2"
+        f"<b>👤 Profile — {display_name}</b>\n\n"
+        f"🔑 <b>License Key:</b>\n"
+        f"<tg-spoiler>{license_key}</tg-spoiler>\n\n"
+        f"👥 <b>Referrals:</b> {referrals}\n"
+        f"💸 <b>Discount:</b> {discount}%\n\n"
+        f"🔗 <b>Personal Referral Link:</b>\n{referral_link}",
+        parse_mode="HTML"
     )
 
 
